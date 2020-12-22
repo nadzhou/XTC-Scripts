@@ -1,0 +1,4 @@
+FROM:python3.8
+ADD xtc_read.py /
+RUN conda install --file requirements.txt
+CMD ["python", "./xtc_read.py"]
