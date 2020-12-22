@@ -10,11 +10,12 @@ import numpy as np
 # Function for ser_tyr_residslculating H-bonds. 
 from MDAnalysis.analysis.hydrogenbonds.hbond_analysis import HydrogenBondAnalysis as HBA
 
-
-import pandas as pd
 import seaborn as sns
 
 from MDAnalysis.analysis.distances import distance_array
+
+
+
 
 def main(): 
 
@@ -22,10 +23,6 @@ def main():
     print("loading universe")
     nad_pt = mda.Universe("/home/nadzhou/Mehreen/md.tpr", "/home/nadzhou/Mehreen/140-147ns.xtc")
 
-    # # select atoms. In this ser_tyr_residsse only TYR
-    # print(nad_pt.select_atoms("resname TYR"))
-    # print("ser_tyr_residslculating hydrogens...")
-    
     # ser_tyr_residslc_hbonds(nad_pt)
 
     # Select SER and TYR
@@ -33,31 +30,54 @@ def main():
     tyr_resids = nad_pt.select_atoms('resname TYR')
 
 
+    calc_distances_bn(ser_resids, tyr_resids)
+
+    # calc_pca(nad_pt)
+
+    # calc_rmsf(nad_pt, ser_resids)
+
+    # calc_pca(nad_pt)
+
+    
+def calc_rmsf(universe: mda.Universe, atom_select: mda.Universe):
+
+    calphas = universe.select_atoms("name CA")
+    rmsf = mda.analysis.rms.RMSF(atom_select, verbose=True).run()
+    rmsf2 = mda.analysis.rms.RMSF(calphas, verbose=True).run()
+
+    print(rmsf.rmsf)
+    sns.lineplot(atom_select.resnums, rmsf.rmsf, label="SER residues")
+    sns.lineplot(calphas.resnums, rmsf2.rmsf, label="C Alpha")
+
+    plt.xlabel("Residue number")
+    plt.ylabel("RMSF values")
+    plt.title("RMSF")
+    plt.show()
+
+
+
+
+
+def calc_distances_bn(ser_resids, tyr_resids) -> np.ndarray: 
+    """Given two residues, calculate the distance matrix 
+    """
+    
     print("file reading done.")
 
     print("selecting residues...")
 
-    ser_tyr_dists = distances.self_distance_array(ser_resids.positions)
+    ser_tyr_dists = distances.distance_array(ser_resids.positions, tyr_resids.positions)
     # tYr_self_distances = distances.self_distance_array(tyr_resids.positions)
     # # self_distances = np.where(self_distances >= 10, np.max(self_distances), self_distances)
 
-
-    print(ser_tyr_dists.reshape(-1, 2))
-    sns.histplot(ser_tyr_dists.reshape(-1, 2), alpha=0.6)
+    print(ser_tyr_dists.shape)
+    print(ser_tyr_dists)
+    sns.heatmap(ser_tyr_dists, alpha=0.6)
+    plt.savefig("heatmap.png")
+    plt.title("Heat map of two residues")
+    plt.xlabel("Serine distances")
+    plt.ylabel("Tyrosine distances")
     plt.show()
-
-    # calc_distance_plot(self_distances, ser_tyr_resids)
-
-    # print(ser_resids.positions)
-    # print(tYr_self_distances.shape)
-
-
-
-    # calc_pca(nad_pt)
-
-    # sns.lineplot(ser_self_distances, tYr_self_distances)
-    # plt.show()
-
 
 
 def calc_distance(atomgroup_select_1: "AtomGroup", atom_group_select_2: "AtomGroup"): 
@@ -106,20 +126,33 @@ def ser_tyr_residslc_hbonds(universe):
             calculate hydrogens"""
 
     nad_bonds = HBA(universe=universe)
-    print(nad_bonds.run())
-    tau_timeseries, timeseries = nad_bonds.lifetime()
-
-    print(tau_timeseries)
+    nad_bonds.run(verbose=True)
 
 
 
 def calc_pca(universe):
     import MDAnalysis.analysis.pca as pca
     
-    tyr_pca = pca.PCA(universe, select='backbone')
-    tyr_pca.run()
+    tyr_pca = pca.PCA(universe, select='resname TYR')
+    tyr_pca.run(verbose=True)
 
-    print(tyr_pca)
+    print(tyr_pca.p_components.shape)
+    plt.plot(tyr_pca.cumulated_variance[:10])
+    plt.xlabel('Principal component')
+    plt.ylabel('Cumulative variance')
+    plt.show()
+
+    # n_pcs = np.where(tyr_pca.cumulated_variance > 0.95)[0][0]
+
+    # atomgroup = universe.select_atoms('resname TYR')
+    # pca_space = tyr_pca.transform(atomgroup, n_components=n_pcs)
+
+
+    # sns.heatmap(pca_space, alpha=0.8)
+    # plt.show()
+
+
+
 
 
 if __name__ == '__main__': 
