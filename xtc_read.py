@@ -1,46 +1,57 @@
-#!usr/bin/env/python 3
+#!/home/bin/python
+
 import MDAnalysis as mda
 from MDAnalysis.coordinates.XTC import XTCReader
 from MDAnalysis.analysis import psa
-import matplotlib.pyplot as plt
 
-from MDAnalysis.analysis import distances
 import numpy as np
+from MDAnalysis.analysis import distances
+from numpy.linalg import norm
 
-# Function for ser_tyr_residslculating H-bonds. 
 from MDAnalysis.analysis.hydrogenbonds.hbond_analysis import HydrogenBondAnalysis as HBA
-
-import seaborn as sns
-
 from MDAnalysis.analysis.distances import distance_array
 
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-
+import parse_arguments as pa
 
 def main(): 
+    parser = pa.parse_arguments()
 
-    # Input protein into MDAnalysis
-    print("loading universe")
-    nad_pt = mda.Universe("/home/nadzhou/Mehreen/md.tpr", "/home/nadzhou/Mehreen/140-147ns.xtc")
+    print("loading universe...")
+    new_universe = mda.Universe(parser.input_tpr, parser.input_xtc)
 
-    # ser_tyr_residslc_hbonds(nad_pt)
+    if new_universe: 
+        analysis_list()
+        operation_input = int(input("Select which simulation analysis: "))
+        region_selection_check()
+        input_resid = input("Input selection parameters: ")
 
-    # Select SER and TYR
-    ser_resids = nad_pt.select_atoms('resname SER')
-    tyr_resids = nad_pt.select_atoms('resname TYR')
+        analysis_routes(operation_input, new_universe, input_resid)
 
 
-    calc_distances_bn(ser_resids, tyr_resids)
+def region_selection_check(): 
+    print("\nInitiating atom selection...\n")
+    print("If you want to select a range of atoms, use resid\n\t\te.g., resid 1:240\n")
+    print("For domain, just write the domain name, \n\t\te.g., SH3\n")
+    print("For residue, write resid,\n\t\te.g., resname TER\n")
 
-    # calc_pca(nad_pt)
 
-    # calc_rmsf(nad_pt, ser_resids)
+def analysis_list(): 
+    print("\n1. PCA\t2. Hydrogen Bond lifetimes")
+    print("3. Angles\t4. RMSF\n")
 
-    # calc_pca(nad_pt)
+
+def analysis_routes(analysis_choice, universe, atom_select): 
+    if analysis_choice == 1: 
+        calc_pca(universe, atom_select)
+
+    elif analysis_choice == 4: 
+        calc_rmsf(universe, atom_select)
 
     
 def calc_rmsf(universe: mda.Universe, atom_select: mda.Universe):
-
     calphas = universe.select_atoms("name CA")
     rmsf = mda.analysis.rms.RMSF(atom_select, verbose=True).run()
     rmsf2 = mda.analysis.rms.RMSF(calphas, verbose=True).run()
@@ -52,9 +63,19 @@ def calc_rmsf(universe: mda.Universe, atom_select: mda.Universe):
     plt.xlabel("Residue number")
     plt.ylabel("RMSF values")
     plt.title("RMSF")
+    plt.savefig("RMSF.png")
     plt.show()
 
 
+def theta_NMP(u):
+    """Calculate the NMP-CORE angle for E. coli AdK in degrees"""
+    C = u.select_atoms("resid 115:125 and backbone").center_of_geometry()
+    B = u.select_atoms("resid 90:100 and backbone").center_of_geometry()
+    A = u.select_atoms("resid 35:55 and backbone").center_of_geometry()
+    BA = A - B
+    BC = C - B
+    theta = np.arccos(np.dot(BA, BC)/(norm(BA)*norm(BC)))
+    return np.rad2deg(theta)
 
 
 
@@ -80,46 +101,6 @@ def calc_distances_bn(ser_resids, tyr_resids) -> np.ndarray:
     plt.show()
 
 
-def calc_distance(atomgroup_select_1: "AtomGroup", atom_group_select_2: "AtomGroup"): 
-    """Calculate distance between two given atom group"""
-    return distance_array(atomgroup_select_1.positions, 
-                                   atom_group_select_2.positions
-                                   )
-
-
-def calc_distance_plot(self_distances, residue_select): 
-    """ Calculate self distance
-
-    Args: 
-        self_distances [np..ndarray]: distances of atoms within the structure
-        residue_select [MDAnalysis.Universe]: Select the atoms or residues of interest
-    
-    """
-    n_residue_select = len(residue_select)
-
-    sq_dist_arr = np.zeros((n_residue_select, n_residue_select))
-    triu = np.triu_indices_from(sq_dist_arr, k=1)
-
-    sq_dist_arr[triu] = self_distances
-    sq_dist_arr.T[triu] = self_distances
-
-    fig, ax = plt.subplots()
-    im = ax.pcolor(ser_tyr_resids.resids, residue_select.resids, sq_dist_arr, cmap=plt.cm.get_cmap('Blues_r'))
-
-    # plt.pcolor gives a rectangular grid by default
-    # so we need to make our heatmap square
-    ax.set_aspect('equal')
-
-    # add figure labels and titles
-    plt.ylabel('Residue IDs')
-    plt.xlabel('Residue IDs')
-    plt.title('Atomic distances between SER or TYR atoms')
-
-    # colorbar
-    cbar = fig.colorbar(im)
-    plt.savefig("distance_heat_map.png")
-    plt.show()
-
 
 def ser_tyr_residslc_hbonds(universe): 
     """EXPERIMENTAL: 
@@ -130,76 +111,32 @@ def ser_tyr_residslc_hbonds(universe):
 
 
 
-def calc_pca(universe):
+def calc_pca(universe, atom_select):
     import MDAnalysis.analysis.pca as pca
+    import pandas as pd
+    import seaborn as sns
     
-    tyr_pca = pca.PCA(universe, select='resname TYR')
-    tyr_pca.run(verbose=True)
+    pc = pca.PCA(universe, select=atom_select)
+    pc.run(verbose=True)
 
-    print(tyr_pca.p_components.shape)
-    plt.plot(tyr_pca.cumulated_variance[:10])
-    plt.xlabel('Principal component')
-    plt.ylabel('Cumulative variance')
-    plt.show()
-
-    # n_pcs = np.where(tyr_pca.cumulated_variance > 0.95)[0][0]
-
-    # atomgroup = universe.select_atoms('resname TYR')
-    # pca_space = tyr_pca.transform(atomgroup, n_components=n_pcs)
-
-
-    # sns.heatmap(pca_space, alpha=0.8)
+    # print(tyr_pca.p_components.shape)
+    # plt.plot(tyr_pca.mean_atoms.positions)
+    # plt.xlabel('Principal component')
+    # plt.ylabel('Cumulative variance')
     # plt.show()
 
+    backbone = universe.select_atoms(atom_select)
+    transformed = pc.transform(backbone, n_components=5)
+    pc_df = pd.DataFrame(transformed,
+                  columns=['PC{}'.format(i+1) for i in range(5)])
+    pc_df['Time (ps)'] = pc_df.index * universe.trajectory.dt
 
-
-
+    print(pc_df.head())
+    sns.pairplot(pc_df, hue='Time (ps)')
+    plt.savefig("pairgrid_normal2.png")
+    # sns.map(plt.scatter, marker='.')
+    plt.show()
 
 if __name__ == '__main__': 
     main()
 
-
-
-
-# EXPERIMENTAL: 
-"""
-def ser_tyr_residslc_box(navid_pt, haf_pt): 
-
-    ser_tyr_resids1 = nad_pt.select_atoms('name ser_tyr_resids')
-    ser_tyr_resids2 = haf_pt.select_atoms('name ser_tyr_resids')
-
-    resids1_box, resids2_box, dist_box = distances.dist(ser_tyr_resids1, ser_tyr_resids2,
-                                                    box=[10, 10, 10, 90, 90, 90])
-
-
-
-    plt.plot(resids1_box, dist_box)
-    plt.ylabel('ser_tyr_resids distance (Angstrom)')
-    plt.axvspan(122, 159, zorder=0, alpha=0.2, color='orange', label='LID')
-    plt.axvspan(30, 59, zorder=0, alpha=0.2, color='green', label='NMP')
-    plt.legend()
-    plt.show()
-
-
-
-def ser_tyr_residslculate_distance(nad_pt): 
-    CORE_sel = 'name ser_tyr_resids and (resid 1:15)'
-
-
-    labels = ['DCD', 'DCD2', 'XTC', 'NAMD', 'mixed']
-
-    ps = psa.PSAnalysis([nad_pt, nad_pt], 
-                        labels=labels,
-                        reference=nad_pt, 
-                        path_select='name ca')
-
-
-    ps.generate_paths(align=True, save=False, weights='mass')
-    ps.run(metric='hausdorff')
-
-    print(ps.D)
-    ps.plot(linkage='ward')
-    plt.show()
-
-
-"""
